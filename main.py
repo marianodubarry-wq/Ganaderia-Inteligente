@@ -1,184 +1,142 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-
-# Configuración Estética Minimalista (Campo)
-st.set_page_config(page_title="Ganadería Inteligente", layout="wide")
-st.markdown("""
-    <style>
-    .main { background-color: #F5F5F5; }
-    .stMetric { background-color: #FFFFFF; padding: 15px; border-radius: 10px; border-left: 5px solid #2D5A27; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
-    h1, h2, h3 { color: #2D5A27; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- SIDEBAR (MENÚ LATERAL) ---
-st.sidebar.header("🚜 Oficina de Gestión")
-moneda = st.sidebar.radio("Unidad de Medida", ["Pesos (ARS)", "Dólar MEP"])
-precio_nov = st.sidebar.number_input("Precio Novillito ($/kg)", value=5211.0)
-precio_ternero = st.sidebar.number_input("Precio Ternero ($/kg)", value=5600.0)
-mep = 1433.0 # Valor marzo 2026
-
-# --- PANTALLA PRINCIPAL ---
-st.title("🌾 Ganadería Inteligente")
-st.subheader("Tablero de Control - Norte de Santa Fe")
-
-# Indicadores Principales
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("GMD Media Rodeo", "0.785 kg", "2% vs mes ant.")
-with col2:
-    st.metric("Población Total", "450 Cabezas")
-with col3:
-    valor_total = 450 * 350 * precio_nov
-    if moneda == "Dólar MEP":
-        st.metric("Valor del Stock", f"USD {(valor_total/mep):,.0f}")
-    else:
-        st.metric("Valor del Stock", f"$ {valor_total:,.0f}")
-
-st.divider()
-
-# Sección de Consejos e IA
-st.success(f"💡 **Oportunidad Financiera:** Con el precio a ${precio_nov}, tenés 32 novillitos listos para completar una **Jaula Simple**. Relación C/V: {precio_ternero/precio_nov:.2f}")
-
-st.error("⚠️ **Recordatorio de Rejunte:** Apartar caravanas ...892, ...115 (Anomalías detectadas).")
-
-# Sección de Logística (Tabs)
-tab1, tab2 = st.tabs(["📋 Inventario", "🚛 Optimización de Jaula"])
-
-with tab1:
-    st.write("Aquí se mostrará la lista de animales sincronizada con tu Drive.")
-    st.info("Buscador RFID activo en el menú lateral.")
-import streamlit as st
-import pandas as pd
-import numpy as np
 import plotly.express as px
+from datetime import datetime
 import os
 
-# CONFIGURACIÓN ESTÉTICA Y DE PÁGINA
+# CONFIGURACIÓN ESTÉTICA
 st.set_page_config(page_title="GI - Ganadería Inteligente", layout="wide", page_icon="🐂")
 
-# Estilos CSS Personalizados (Minimalismo de Campo)
 st.markdown("""
     <style>
-    .main { background-color: #F8F9F3; } /* Fondo Arena muy claro */
-    .stMetric { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border-left: 6px solid #2D5A27; box-shadow: 2px 2px 8px rgba(0,0,0,0.08); }
-    h1, h2, h3 { color: #2D5A27; font-family: 'Helvetica Neue', sans-serif; } /* Verde Monte */
-    .css-10trblm { color: #5D4037; } /* Color de texto secundario */
-    .stButton>button { background-color: #2D5A27; color: white; border-radius: 8px; }
+    .main { background-color: #F8F9F3; }
+    h1 { color: #2D5A27; font-family: 'Georgia', serif; font-size: 3.5rem; margin-bottom: 0px; }
+    .sub { color: #5D4037; font-size: 1.2rem; margin-top: 0px; margin-bottom: 2rem; }
+    .stMetric { border-left: 5px solid #2D5A27 !important; background-color: white; padding: 10px; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENCABEZADO PRINCIPAL (HEADER) ---
-# Simulación del logo (esto se puede reemplazar por una imagen real con st.image)
-col_logo, col_titulo = st.columns([1, 6])
-with col_logo:
-    # Usamos un emoji y texto estilizado como logo temporal
-    st.markdown("<h1 style='text-align: center; color: #5D4037; font-size: 60px;'>GI</h1>", unsafe_allow_html=True)
-with col_titulo:
-    st.title("GANADERÍA INTELIGENTE")
-    st.subheader("Optimización Bioeconómica - Reconquista, Santa Fe")
+# --- ENCABEZADO ---
+st.markdown("<h1>GANADERÍA INTELIGENTE</h1>", unsafe_allow_html=True)
+st.markdown("<p class='sub'>Bienvenido, Productor. Gestión autónoma de precisión.</p>", unsafe_allow_html=True)
 
-st.divider()
-
-# --- SIDEBAR (MENÚ LATERAL DE GESTIÓN) ---
+# --- SIDEBAR: GESTIÓN DE DATOS Y CARGA ---
 with st.sidebar:
-    st.markdown("## ⚙️ Configuración")
+    st.header("⚙️ Panel de Control")
+    moneda = st.radio("Unidad de Medida", ["Pesos (ARS)", "Dólar MEP"], key="unit")
     
-    # 1. Moneda y Precios (Base: Marzo 2026)
-    moneda = st.radio("Unidad de Medida", ["Pesos (ARS)", "Dólar MEP"])
+    st.divider()
+    st.subheader("📥 Carga de Datos")
     
-    # Precios simulados por defecto (pueden ser automáticos a futuro)
-    precios_base = {"Novillito": 5211.0, "Ternero": 5600.0, "MEP": 1433.0}
+    # OPCIÓN 1: CARGA MASIVA
+    archivo_subido = st.file_uploader("Subir archivo de pesada (.csv / .xlsx)", type=["csv", "xlsx"])
     
-    precio_nov = st.number_input("Precio Novillito ($/kg)", value=precios_base["Novillito"])
-    precio_ternero = st.number_input("Precio Ternero ($/kg)", value=precios_base["Ternero"])
-    mep = precios_base["MEP"]
+    # OPCIÓN 2: CARGA INDIVIDUAL (FORMULARIO)
+    with st.expander("➕ Carga Manual Individual"):
+        nueva_caravana = st.text_input("N° Caravana")
+        nuevo_peso = st.number_input("Peso (kg)", min_value=0.0)
+        nueva_cat = st.selectbox("Categoría", ["Ternero", "Novillito", "Novillo", "Vaca", "Vaquillona"])
+        if st.button("Registrar Animal"):
+            st.success(f"Animal {nueva_caravana} listo para procesar.")
 
-    # 2. Buscador RFID
-    st.markdown("---")
-    caravana_busqueda = st.text_input("🔍 Buscar Caravana RFID (15 dígitos)")
+    # OPCIÓN 3: GOOGLE SHEETS
+    url_sheets = st.text_input("🔗 Link de Google Sheets (Opcional)")
 
-# --- CARGA DE DATOS (DOCUMENTO DE PRUEBA) ---
-# Intentamos cargar el archivo, si no existe, mostramos mensaje
-archivo_datos = 'datos_prueba_gi.csv'
-if os.path.exists(archivo_datos):
-    df = pd.read_csv(archivo_datos)
-    # Aseguramos formato de caravana y fechas
-    df['Caravana'] = df['Caravana'].astype(str)
-    df['Fecha_Pesada'] = pd.to_datetime(df['Fecha_Pesada'])
-    
-    # --- CÁLCULOS DEL MOTOR ---
-    total_animales = len(df)
-    # GMD Media (Asumimos última pesada vs la anterior si existe, o esperada)
-    gmd_media = df['GMD_Esperada'].mean() # Simplificación para la demo
-    
-    # Valor del Rodeo
-    df['Valor_Actual'] = df['Peso_Actual'] * precio_nov # Simplificación: todo a precio Novillito
-    valor_rodeo_total = df['Valor_Actual'].sum()
+    st.divider()
+    st.subheader("💰 Precios del Día ($/kg)")
+    p_nov = st.number_input("Novillito", value=5211.0)
+    p_ter = st.number_input("Ternero", value=5650.0)
+    p_vac = st.number_input("Vaca", value=2450.0)
+    val_mep = 1433.0
 
-    # --- PANTALLA PRINCIPAL (DASHBOARD) ---
-    # 1. KPIs (Tarjetas de Métricas)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(label="👥 Población Total", value=f"{total_animales} Cabezas")
-    with col2:
-        st.metric(label="📈 GMD Media Estimada", value=f"{gmd_media:.3f} kg/día", delta="0.010 kg vs mes ant.")
-    with col3:
-        if moneda == "Dólar MEP":
-            st.metric(label="💰 Valor del Rodeo", value=f"USD {(valor_rodeo_total/mep):,.0f}")
+# --- PROCESAMIENTO DE DATOS ---
+# Prioridad: 1. Archivo subido, 2. Archivo en GitHub
+archivo_base = 'datos_prueba_gi.csv'
+
+if archivo_subido is not None:
+    try:
+        if archivo_subido.name.endswith('.csv'):
+            df = pd.read_csv(archivo_subido)
         else:
-            st.metric(label="💰 Valor del Rodeo", value=f"$ {valor_rodeo_total:,.0f}")
+            df = pd.read_excel(archivo_subido)
+        st.sidebar.success("✅ Datos cargados correctamente.")
+    except Exception as e:
+        st.sidebar.error(f"Error al leer archivo: {e}")
+        df = pd.read_csv(archivo_base) if os.path.exists(archivo_base) else None
+elif url_sheets:
+    # Lógica para leer Google Sheets (requiere que el link sea público o exportable)
+    try:
+        sheet_url = url_sheets.replace('/edit#gid=', '/export?format=csv&gid=')
+        df = pd.read_csv(sheet_url)
+    except:
+        st.sidebar.warning("No se pudo leer el Sheets. Verifique permisos.")
+        df = pd.read_csv(archivo_base) if os.path.exists(archivo_base) else None
+else:
+    df = pd.read_csv(archivo_base) if os.path.exists(archivo_base) else None
 
-    st.write("---")
+# --- DASHBOARD PRINCIPAL ---
+if df is not None:
+    df['Caravana'] = df['Caravana'].astype(str)
+    
+    col_izq, col_der = st.columns([1, 2.2])
 
-    # 2. Anomalías y Consejos (Z-Score > 2 desvíos)
-    media_peso = df['Peso_Actual'].mean()
-    desvio_peso = df['Peso_Actual'].std()
-    
-    # Identificar Anomalías Negativas
-    anomalias = df[df['Peso_Actual'] < (media_peso - 2 * desvio_peso)]
-    
-    st.markdown("### 🚨 Panel de Alertas y Oportunidades")
-    
-    if not anomalias.empty:
-        st.error(f"⚠️ **Atención:** Se detectaron {len(anomalias)} animales con bajo rendimiento (Anomalías Negativas).")
-        st.write(anomalias[['Caravana', 'Peso_Actual', 'Lote']])
-        st.markdown("*Recomendación: Apartar en el próximo rejunte para revisión sanitaria.*")
-    else:
-        st.success("✅ No se detectaron anomalías significativas en el peso actual.")
+    with col_izq:
+        st.markdown("### 📊 Mi Rodeo")
+        st.metric("Total Hacienda", f"{len(df)} Cabezas")
+        
+        # Conteo detallado
+        st.write("---")
+        conteo = df['Categoria'].value_counts()
+        for cat, cant in conteo.items():
+            st.write(f"**{cat}:** {cant}")
+        
+        st.divider()
+        # Valuación
+        def valuar(row):
+            if "Ternero" in row['Categoria']: return row['Peso_Actual'] * p_ter
+            if "Novillito" in row['Categoria']: return row['Peso_Actual'] * p_nov
+            return row['Peso_Actual'] * p_vac
+        
+        df['Valor_Actual'] = df.apply(valuar, axis=1)
+        v_total = df['Valor_Actual'].sum()
+        
+        if moneda == "Dólar MEP":
+            st.metric("Capital en Pie", f"USD {(v_total/val_mep):,.0f}")
+        else:
+            st.metric("Capital en Pie", f"$ {v_total:,.0f}")
 
-    # 3. Gráficos y Tablas
-    st.write("---")
-    tab1, tab2 = st.tabs(["📋 Inventario Completo", "📊 Distribución de Pesos"])
+    with col_der:
+        # LÓGICA DE VENTAS
+        st.markdown("### 🚛 Oportunidades y Logística")
+        listos = df[df['Peso_Actual'] >= 370]
+        
+        if len(listos) >= 30:
+            st.success(f"🎯 **¡Jaula Lista!** Tenés {len(listos)} animales en peso de venta. Esto completa **{len(listos)//33} jaula(s)**.")
+            
+        else:
+            st.info(f"Faltan {33 - len(listos)} animales para completar una jaula de 33 novillitos.")
+
+        st.divider()
+        # ANOMALÍAS
+        st.markdown("### 🚨 Apartar (Anomalías)")
+        media = df['Peso_Actual'].mean()
+        std = df['Peso_Actual'].std()
+        anomalias = df[df['Peso_Actual'] < (media - 2*std)]
+        
+        if not anomalias.empty:
+            st.warning(f"Hay {len(anomalias)} animales con desvío crítico. Revisar en el próximo rejunte.")
+            st.table(anomalias[['Caravana', 'Peso_Actual', 'Lote']].head(5))
+        else:
+            st.success("Rendimiento uniforme en todo el lote.")
+
+    # GRÁFICO DE CAMPANA
+    st.divider()
+    st.markdown("### 📈 Distribución Estadística (Campana de Gauss)")
+    fig = px.histogram(df, x="Peso_Actual", color="Categoria", marginal="rug", 
+                       title="Dispersión de Kilos", color_discrete_sequence=['#2D5A27', '#5D4037', '#8D6E63'])
+    st.plotly_chart(fig, use_container_width=True)
     
-    with tab1:
-        st.dataframe(df.style.background_gradient(cmap='YlGn', subset=['Peso_Actual']), use_container_width=True)
-    
-    with tab2:
-        # Gráfico de Campana de Gauss (Distribución Normal)
-        fig_dist = px.histogram(df, x="Peso_Actual", nbins=20, title="Distribución de Pesos del Rodeo", 
-                               labels={'Peso_Actual': 'Peso (kg)'}, color_discrete_sequence=['#2D5A27'])
-        # Líneas de media y desvíos
-        fig_dist.add_vline(x=media_peso, line_dash="dash", line_color="#5D4037", annotation_text="Media")
-        fig_dist.add_vline(x=media_peso - 2*desvio_peso, line_color="#ff4b4b", annotation_text="-2s")
-        st.plotly_chart(fig_dist, use_container_width=True)
 
 else:
-    # Mensaje si no hay archivo de datos
-    st.warning("⚠️ No se encontró el archivo de datos `datos_prueba_gi.csv`. Por favor, subilo a GitHub para ver la App funcionando.")
-    st.info("💡 Podés usar el código de abajo para generar un archivo de prueba.")
-
-# --- BÚSQUEDA RFID ---
-if caravana_busqueda and os.path.exists(archivo_datos):
-    animal = df[df['Caravana'] == caravana_busqueda]
-    if not animal.empty:
-        st.sidebar.markdown("---")
-        st.sidebar.success(f"📍 Ficha del Animal: {caravana_busqueda}")
-        st.sidebar.write(animal.iloc[0])
-    else:
-        st.sidebar.error("❌ Animal no encontrado.")
-with tab2:
-    st.write("🚛 **Transporte sugerido:** Semirremolque Jaula (1 Piso)")
-    st.write("Carga actual: 32 Novillitos + 3 Terneros de bajo rendimiento (Relleno).")
-
+    st.warning("⚠️ Sin datos disponibles. Subí un archivo o revisá el link de Sheets.")
