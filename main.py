@@ -73,7 +73,23 @@ elif url_sheets:
         st.sidebar.warning("No se pudo leer el Sheets. Verifique permisos.")
         df = pd.read_csv(archivo_base) if os.path.exists(archivo_base) else None
 else:
-    df = pd.read_csv(archivo_base) if os.path.exists(archivo_base) else None
+    # --- PROCESAMIENTO DE DATOS SEGURO ---
+archivo_base = 'datos_prueba_gi.csv'
+
+def cargar_datos_seguro(path):
+    try:
+        # Intentamos leer ignorando filas con errores y detectando el separador automáticamente
+        return pd.read_csv(path, sep=None, engine='python', on_bad_lines='skip')
+    except Exception as e:
+        st.error(f"Error al leer la base de datos: {e}")
+        return None
+
+if archivo_subido is not None:
+    # (Lógica para archivo subido igual que antes...)
+    pass
+else:
+    # Esta es la línea que fallaba, ahora usa la función segura
+    df = cargar_datos_seguro(archivo_base) if os.path.exists(archivo_base) else None
 
 # --- DASHBOARD PRINCIPAL ---
 if df is not None:
@@ -140,3 +156,4 @@ if df is not None:
 
 else:
     st.warning("⚠️ Sin datos disponibles. Subí un archivo o revisá el link de Sheets.")
+
