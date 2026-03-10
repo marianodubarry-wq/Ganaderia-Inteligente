@@ -12,111 +12,99 @@ st.markdown("""
     .main { background-color: #F8F9F3; }
     h1 { color: #2D5A27; font-family: 'Georgia', serif; font-size: 3rem; margin-bottom: 0px; }
     .sub { color: #5D4037; font-size: 1.1rem; margin-top: 0px; margin-bottom: 2rem; }
-    .stMetric { border-left: 5px solid #2D5A27 !important; background-color: white; padding: 15px; border-radius: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
+    .stMetric { border-left: 5px solid #2D5A27 !important; background-color: white; padding: 15px; border-radius: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ENCABEZADO ---
 st.markdown("<h1>GANADERÍA INTELIGENTE</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub'>Bienvenido, Productor. Simulación de Máxima Capacidad Activa.</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub'>Bienvenido, Productor. Gestión Bioeconómica de Precisión.</p>", unsafe_allow_html=True)
 
 # --- SIDEBAR (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     moneda = st.radio("Unidad de Medida", ["Pesos (ARS)", "Dólar MEP"], key="unit")
-    
     st.divider()
-    st.subheader("💰 Precios del Día ($/kg)")
+    st.subheader("💰 Precios de Mercado ($/kg)")
     p_nov = st.number_input("Novillito", value=5211.0)
     p_ter = st.number_input("Ternero", value=5650.0)
     p_vac = st.number_input("Vaca", value=2450.0)
-    val_mep = 1433.0 # Cotización Marzo 2026
+    val_mep = 1433.0
 
 # --- GENERADOR INTERNO DE DATOS (500 ANIMALES) ---
-@st.cache_data # Esto hace que los datos no cambien cada vez que tocas un botón
-def generar_rodeo_pesado():
+@st.cache_data
+def generar_rodeo():
     n = 500
-    categorias = {
-        "Ternero": {"peso_mu": 185, "sigma": 15, "gmd": 0.750},
-        "Novillito": {"peso_mu": 330, "sigma": 25, "gmd": 0.880},
-        "Novillo": {"peso_mu": 425, "sigma": 30, "gmd": 0.980}
+    cats = {
+        "Ternero": {"mu": 185, "sd": 15, "p": p_ter},
+        "Novillito": {"mu": 330, "sd": 25, "p": p_nov},
+        "Novillo": {"mu": 425, "sd": 30, "p": p_nov}
     }
     rows = []
     for i in range(n):
-        cat = random.choice(list(categorias.keys()))
-        conf = categorias[cat]
-        # Generar peso con distribución normal
-        peso = round(np.random.normal(conf["peso_mu"], conf["sigma"]), 1)
-        # Inyectar anomalías negativas (animales quedados)
-        if i % 35 == 0: peso = peso * 0.7 
-        
-        rows.append({
-            "Caravana": f"320000{random.randint(100000, 999999)}",
-            "Peso_Actual": peso,
-            "Categoria": cat,
-            "Lote": f"Lote_{cat}_Norte"
-        })
+        c = random.choice(list(cats.keys()))
+        peso = round(np.random.normal(cats[c]["mu"], cats[c]["sd"]), 1)
+        if i % 35 == 0: peso *= 0.7 # Anomalía
+        rows.append({"Caravana": f"320000{random.randint(100000,999999)}", "Peso": peso, "Categoria": c})
     return pd.DataFrame(rows)
 
-df = generar_rodeo_pesado()
+df = generar_rodeo()
 
-# --- CUERPO DEL DASHBOARD ---
+# Valuación
+def calcular_valor(row):
+    if row['Categoria'] == "Ternero": return row['Peso'] * p_ter
+    if row['Categoria'] == "Novillito": return row['Peso'] * p_nov
+    return row['Peso'] * p_nov # Para Novillo usamos precio novillito o similar
+
+df['Valor_ARS'] = df.apply(calcular_valor, axis=1)
+valor_total_ars = df['Valor_ARS'].sum()
+
+# --- CUERPO PRINCIPAL ---
 col_izq, col_der = st.columns([1, 2])
 
 with col_izq:
     st.markdown("### 📊 Mi Rodeo")
     st.metric("Total Hacienda", f"{len(df)} Cabezas")
     
-    conteo = df['Categoria'].value_counts()
-    for cat, cant in conteo.items():
-        st.write(f"**{cat}:** {cant} unidades")
+    for cat, cant in df['Categoria'].value_counts().items():
+        st.write(f"**{cat}:** {cant}")
     
     st.divider()
-    # Valuación económica
-    def valuar(row):
-        if row['Categoria'] == "Ternero": return row['Peso_Actual'] * p_ter
-        if row['Categoria'] == "Novillito": return row['Peso_Actual'] * p_nov
-        return row['Peso_Actual'] * p_vac
-    
-    df['Valor_Ind'] = df.apply(valuar, axis=1)
-    v_total = df['Valor_Ind'].sum()
-    
     if moneda == "Dólar MEP":
-        st.metric("Capital en Pie", f"USD {(v_total/val_mep):,.0f}")
+        st.metric("Capital en Pie", f"USD {(valor_total_ars/val_mep):,.0f}")
     else:
-        st.metric("Capital en Pie", f"$ {v_total:,.0f}")
+        st.metric("Capital en Pie", f"$ {valor_total_ars:,.0f}")
 
 with col_der:
-    st.markdown("### 🚛 Logística y Oportunidades")
-    listos = df[df['Peso_Actual'] >= 380] # Novillos pesados para venta
-    
+    st.markdown("### 🚛 Logística y Alertas")
+    listos = df[df['Peso'] >= 380]
     if len(listos) >= 30:
-        st.success(f"🎯 **Jaulas Disponibles:** Tenés {len(listos)} animales listos para venta (+380kg). Completás **{len(listos)//33} jaula(s)**.")
+        st.success(f"🎯 **Jaulas:** {len(listos)} animales listos. Completás **{len(listos)//33} jaula(s)**.")
     else:
-        st.info(f"Faltan {33 - len(listos)} animales para completar una jaula de gordos.")
+        st.info(f"Faltan {33 - len(listos)} animales para una jaula completa.")
 
     st.divider()
-    # ANOMALÍAS (Z-Score)
-    st.markdown("### 🚨 Apartar (Anomalías)")
-    media_p = df['Peso_Actual'].mean()
-    std_p = df['Peso_Actual'].std()
-    anomalias = df[df['Peso_Actual'] < (media_p - 2*std_p)]
-    
+    media = df['Peso'].mean()
+    std = df['Peso'].std()
+    anomalias = df[df['Peso'] < (media - 2*std)]
     if not anomalias.empty:
-        st.warning(f"Se detectaron {len(anomalias)} animales con bajo rendimiento. Revisar sanidad.")
-        st.dataframe(anomalias[['Caravana', 'Peso_Actual', 'Categoria']].head(10), hide_index=True)
-    else:
-        st.success("Rodeo uniforme. Sin anomalías detectadas.")
+        st.warning(f"🚨 {len(anomalias)} Anomalías de peso detectadas.")
+        st.dataframe(anomalias[['Caravana', 'Peso', 'Categoria']].head(5), hide_index=True)
 
-# --- GRÁFICO DE CAMPANA DE GAUSS ---
+# --- GRÁFICOS ---
 st.divider()
-st.markdown("### 📈 Distribución Estadística de Pesos")
-fig = px.histogram(df, x="Peso_Actual", color="Categoria", marginal="box", 
-                   title="Dispersión de Kilos en el Rodeo Total",
-                   color_discrete_sequence=['#2D5A27', '#5D4037', '#A89F91'],
-                   labels={'Peso_Actual': 'Peso (kg)', 'count': 'Cantidad de Animales'})
-st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("⚠️ Sin datos disponibles. Subí un archivo o revisá el link de Sheets.")
+c1, c2 = st.columns(2)
+
+with c1:
+    st.markdown("### 📈 Distribución de Kilos")
+    fig1 = px.histogram(df, x="Peso", color="Categoria", title="Campana de Gauss", 
+                        color_discrete_sequence=['#2D5A27', '#5D4037', '#A89F91'])
+    st.plotly_chart(fig1, use_container_width=True)
+
+with c2:
+    st.markdown("### 💰 Distribución del Capital")
+    fig2 = px.pie(df, values='Valor_ARS', names='Categoria', title="% Valor por Categoría",
+                  color_discrete_sequence=['#2D5A27', '#5D4037', '#A89F91'], hole=.4)
+    st.plotly_chart(fig2, use_container_width=True)
 
 
